@@ -17,12 +17,13 @@
         .container { width: 100%; max-width: 480px; background: var(--card-bg); padding: 20px; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
         h1 { font-size: 1.5rem; margin-bottom: 8px; text-align: center; color: var(--accent); }
         .subtitle { font-size: 0.85rem; color: var(--text-dim); text-align: center; margin-bottom: 20px; }
-        label { font-weight: bold; font-size: 0.9rem; display: block; margin-bottom: 8px; }
+        label { font-weight: bold; font-size: 0.9rem; display: block; margin-top: 15px; margin-bottom: 8px; }
         textarea { width: 100%; height: 100px; background: #2a2a2a; border: 2px solid #3a3a3a; border-radius: 8px; color: #fff; padding: 12px; font-size: 1rem; resize: none; outline: none; transition: border-color 0.2s; }
         textarea:focus { border-color: var(--accent); }
-        .api-group { margin-top: 15px; }
+        select { width: 100%; background: #2a2a2a; border: 2px solid #3a3a3a; border-radius: 8px; color: #fff; padding: 12px; font-size: 1rem; outline: none; }
+        select:focus { border-color: var(--accent); }
         input[type="password"] { width: 100%; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 8px; color: #fff; padding: 10px; font-size: 0.9rem; margin-top: 5px; }
-        button { width: 100%; background: var(--accent); color: #000; border: none; padding: 14px; border-radius: 8px; font-size: 1rem; font-weight: bold; margin-top: 20px; cursor: pointer; transition: opacity 0.2s; }
+        button { width: 100%; background: var(--accent); color: #000; border: none; padding: 14px; border-radius: 8px; font-size: 1rem; font-weight: bold; margin-top: 25px; cursor: pointer; transition: opacity 0.2s; }
         button:active { opacity: 0.8; }
         button:disabled { background: #444; color: #888; cursor: not-allowed; }
         .output-box { margin-top: 25px; text-align: center; display: none; }
@@ -37,10 +38,18 @@
 
 <div class="container">
     <h1>VIDASK</h1>
-    <div class="subtitle">Cloud-accelerated Text-to-Video Engine</div>
+    <div class="subtitle">Multi-Engine Text-to-Video Hub</div>
+
+    <label for="engineSelect">Choose Video AI Engine:</label>
+    <select id="engineSelect">
+        <option value="Lightricks/LTX-Video">Engine 1: LTX Video (Fast & Fluid)</option>
+        <option value="Wan-AI/Wan2.1-T2V-1.4B">Engine 2: Wan 2.1 (Cinematic Physics)</option>
+        <option value="Tencent-Hunyuan/HunyuanVideo">Engine 3: HunyuanVideo (High Quality)</option>
+        <option value="damo-vilab/modelscope-damo-text-to-video-hd">Engine 4: Damo-Vilab (Classic)</option>
+    </select>
 
     <label for="prompt">Enter Video Prompt:</label>
-    <textarea id="prompt" placeholder="e.g., A red ball bouncing down a futuristic neon city street, 4k, cinematic..."></textarea>
+    <textarea id="prompt" placeholder="e.g., A cinematic shot of a neon butterfly flapping its wings in a dark forest, 4k..."></textarea>
 
     <div class="api-group">
         <label for="token">Hugging Face API Token (<a href="https://huggingface.co" target="_blank" style="color: var(--accent); text-decoration: none;">Get Free Token</a>):</label>
@@ -64,6 +73,7 @@
     async function generateVideo() {
         const prompt = document.getElementById('prompt').value.trim();
         const token = document.getElementById('token').value.trim();
+        const selectedModel = document.getElementById('engineSelect').value;
         const btn = document.getElementById('generateBtn');
         const loader = document.getElementById('loader');
         const status = document.getElementById('status');
@@ -72,7 +82,6 @@
         const videoPlayer = document.getElementById('videoPlayer');
         const downloadLink = document.getElementById('downloadLink');
 
-        // Reset views
         errorDiv.innerText = "";
         outputBox.style.display = "none";
 
@@ -85,15 +94,16 @@
             return;
         }
 
-        // Lock UI & Start Loader
         btn.disabled = true;
         loader.style.display = "block";
-        status.innerText = "Connecting to AI cluster... (May take 1-2 mins)";
+        status.innerText = "Waking up cloud engine... (May take 1-2 mins if engine is sleeping)";
 
         try {
-            // Using the open-source model: Damo-vilab Text-to-Video
+            // Constructing the exact correct Hugging Face API endpoint for the selected model
+            const apiEndpoint = `https://api-inference.huggingface.co/models/${selectedModel}`;
+
             const response = await fetch(
-                "https://huggingface.co",
+                apiEndpoint,
                 {
                     headers: { 
                         Authorization: `Bearer ${token}`,
@@ -105,22 +115,26 @@
             );
 
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
                 if (response.status === 503) {
-                    throw new Error("Model is currently loading in the cloud. Please wait a few seconds and tap Generate again.");
+                    throw new Error("This specific engine is loading. Wait 15 seconds and try again, or switch engines above!");
                 }
-                throw new Error(errData.error || `Server Error (Status ${response.status})`);
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || `Engine Error (Status ${response.status})`);
             }
 
-            status.innerText = "Compiling video container...";
+            status.innerText = "Compiling video frames...";
             const blob = await response.blob();
+            
+            // Validate that we actually got a video back
+            if (blob.size < 100) {
+                throw new Error("Received an empty or invalid file. Try a different engine.");
+            }
+
             const videoUrl = URL.createObjectURL(blob);
             
-            // Inject stream into video player
             videoPlayer.src = videoUrl;
             downloadLink.href = videoUrl;
             
-            // Show result
             loader.style.display = "none";
             status.innerText = "";
             outputBox.style.display = "block";
